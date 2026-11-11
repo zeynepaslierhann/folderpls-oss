@@ -1,0 +1,468 @@
+@import "tailwindcss";
+@import "./motion.css";
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Brand palette: pale lemon page background, bright lemon for icons and CTAs. */
+  --color-brand-dark: #2a2a2a;
+  --color-brand-light: #F5F3E6;
+  --color-brand-lemon: #FFE500;
+  --color-brand-ocean: #9BB3D0;
+  --color-brand-ocean-foreground: #ffffff;
+  /* Text-safe ocean: #9BB3D0 is ~1.9:1 on the lemon background (WCAG AA
+     needs 4.5:1). Same hue, darker for text in light mode. */
+  --brand-ocean-ink: #3e5f88;
+
+  /* Light theme: warm yellow surfaces at 60% saturation. */
+  --background: 52 60% 88%;
+  --foreground: 50 18% 15%;
+
+  --card: 52 56% 86%;
+  --card-foreground: var(--foreground);
+
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+
+  --primary: var(--foreground);
+  --primary-foreground: var(--background);
+
+  --secondary: 52 52% 84%;
+  --secondary-foreground: var(--foreground);
+
+  --muted: 52 50% 85%;
+  --muted-foreground: 50 14% 30%;
+
+  --accent: 213 36% 71%;
+  --accent-foreground: var(--foreground);
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 52 46% 82%;
+  --input: var(--border);
+  --ring: var(--foreground);
+
+  --radius: 0.5rem;
+
+  /* Built-in status colors — same hues as before, shade-tuned for AA contrast.
+     Each pairs with a foreground for readable badge text. */
+  --status-draft: 215 16% 47%;
+  --status-draft-foreground: 0 0% 100%;
+  --status-in-review: 38 92% 50%;
+  --status-in-review-foreground: 222 47% 11%;
+  --status-approved: 217 91% 60%;
+  --status-approved-foreground: 0 0% 100%;
+  --status-final: 142 72% 36%;
+  --status-final-foreground: 0 0% 100%;
+
+  /* ── Panel token'ları (panel tasarım belirteçleri) ──
+     Ham hex, yalnız var() ile kullanılır. Kök değerler pazarlama sitesinin
+     paylaşılan bileşenlerde (Button secondary, menüler) bugünkü görünümünü
+     korur; uygulama alanı (.fp-app / html[data-fp-app]) bunları ezer. */
+  --canvas: hsl(var(--background));
+  --sidebar: hsl(var(--background));
+  --raised: hsl(var(--background));
+  --hover: hsl(var(--accent));
+  --fg: hsl(var(--foreground));
+  --fg-2: hsl(var(--muted-foreground));
+  --fg-3: hsl(var(--muted-foreground));
+  --line: hsl(var(--border));
+  --control: hsl(var(--muted-foreground) / 0.7);
+  --lemon: #FFE500;
+  --accent-soft: #FFF4B8;
+  --danger: #B3261E;
+  --success: #2F6B3A;
+  --warning: #8A5A00;
+
+  /* Yarıçap: kökte eski shadcn ölçüsü (6/8/10), uygulamada 4/6/10. */
+  --r-sm: calc(var(--radius) - 2px);
+  --r-md: var(--radius);
+  --r-lg: calc(var(--radius) + 2px);
+
+  /* Gölge: yalnız yüzen katmanlar. */
+  --fp-shadow-pop: 0 4px 16px rgb(34 32 27 / 0.08), 0 0 0 1px var(--line);
+  --fp-shadow-dialog: 0 16px 48px rgb(34 32 27 / 0.14);
+
+  /* Hareket: üst sınır 200ms, tek easing, spring yok. */
+  --dur-fast: 100ms;
+  --dur-base: 160ms;
+  --dur-slow: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.dark {
+  --brand-ocean-ink: #9bb3d0;
+  /* Dark theme: soft neutral grays that stay gentle on the eyes. */
+  --background: 0 0% 14%;
+  --foreground: 0 0% 82%;
+
+  --card: 0 0% 17%;
+  --card-foreground: var(--foreground);
+
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+
+  --primary: 0 0% 88%;
+  --primary-foreground: var(--background);
+
+  --secondary: 0 0% 24%;
+  --secondary-foreground: var(--foreground);
+
+  --muted: 0 0% 22%;
+  /* 62% (was 58%): muted text sits on translucent surfaces (header,
+     cards) that are lighter than the page — keeps AA 4.5:1 there too. */
+  --muted-foreground: 0 0% 62%;
+
+  --accent: 213 36% 71%;
+  --accent-foreground: var(--background);
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 0 0% 26%;
+  --input: var(--border);
+  --ring: 0 0% 72%;
+
+  /* Status colors — one shade lighter on dark surfaces; foreground preserved. */
+  --status-draft: 215 16% 52%;
+  --status-draft-foreground: 0 0% 100%;
+  --status-in-review: 38 95% 56%;
+  --status-in-review-foreground: 222 47% 11%;
+  --status-approved: 217 91% 62%;
+  --status-approved-foreground: 0 0% 100%;
+  --status-final: 142 60% 42%;
+  --status-final-foreground: 0 0% 100%;
+}
+
+/* ── Uygulama alanı (giriş yapılmış panel) ─────────────────────────────────
+   app/(dashboard)/layout.tsx içeriği .fp-app ile sarar; Radix portalları
+   (menü, dialog) body'ye render olduğu için <AppScope> aynı token'ları
+   html[data-fp-app] ile de açar. Pazarlama sitesi bu değerleri görmez. */
+.fp-app,
+html[data-fp-app] {
+  --canvas: #FBF9F3;
+  --sidebar: #F4F1E7;
+  --raised: #FFFFFF;
+  --hover: #EFEBDF;
+  --fg: #22201B;
+  --fg-2: #5C574B;
+  --fg-3: #6E6857;
+  --line: #E6E1D3;
+  --control: #8F8872;
+  --danger: #B3261E;
+  --success: #2F6B3A;
+  --warning: #8A5A00;
+
+  /* shadcn token'ları yeni değerlere eşlenir (HSL üçlüsü). */
+  --background: 45 50% 96.9%;
+  --foreground: 42.9 11.5% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 42.9 11.5% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 42.9 11.5% 12%;
+  --primary: 42.9 11.5% 12%;
+  --primary-foreground: 45 50% 96.9%;
+  --secondary: 45 33.3% 90.6%;
+  --secondary-foreground: 42.9 11.5% 12%;
+  --muted: 45 33.3% 90.6%;
+  --muted-foreground: 42.4 10.2% 32.7%;
+  --accent: 45 33.3% 90.6%;
+  --accent-foreground: 42.9 11.5% 12%;
+  --destructive: 3.2 71.3% 41%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 44.2 27.5% 86.5%;
+  --input: 45.5 11.5% 50.4%;
+  --ring: 42.9 11.5% 12%;
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+
+  /* Tipografi: uygulama gövdesi 13px, satır adı/input/düğme 14px.
+     10–11px kullanılmaz. */
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: calc(20 / 13);
+  --text-base: 0.875rem;
+  --text-base--line-height: calc(20 / 14);
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.4;
+}
+
+/* Gövde 14px — html'e DEĞİL (rem tabanı 16px kalmalı), sarmalayıcıya ve
+   portalların render olduğu body'ye. */
+.fp-app,
+html[data-fp-app] body {
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
+}
+
+.dark .fp-app,
+html.dark[data-fp-app] {
+  --canvas: #1B1A17;
+  --sidebar: #161512;
+  --raised: #24221E;
+  --hover: #2C2A25;
+  --fg: #ECE8DC;
+  --fg-2: #B3AD9C;
+  /* #A39D8B: en kötü koyu yüzeyde (--accent-soft #3A3524) 4.52:1, --hover
+     üstünde 5.29:1 — aktif/hover kenar çubuğu sayaçları AA'yı geçer. */
+  --fg-3: #A39D8B;
+  --line: #33302A;
+  --control: #7A7462;
+  --danger: #F2877D;
+  --success: #7DB585;
+  --warning: #D3B44A;
+  --accent-soft: #3A3524;
+  --fp-shadow-pop: 0 4px 16px rgb(0 0 0 / 0.4), 0 0 0 1px var(--line);
+  --fp-shadow-dialog: 0 16px 48px rgb(0 0 0 / 0.5);
+
+  --background: 45 8% 9.8%;
+  --foreground: 45 29.6% 89.4%;
+  --card: 40 9.1% 12.9%;
+  --card-foreground: 45 29.6% 89.4%;
+  --popover: 40 9.1% 12.9%;
+  --popover-foreground: 45 29.6% 89.4%;
+  --primary: 45 29.6% 89.4%;
+  --primary-foreground: 45 8% 9.8%;
+  --secondary: 42.9 8.6% 15.9%;
+  --secondary-foreground: 45 29.6% 89.4%;
+  --muted: 42.9 8.6% 15.9%;
+  --muted-foreground: 44.3 13.1% 65.7%;
+  --accent: 42.9 8.6% 15.9%;
+  --accent-foreground: 45 29.6% 89.4%;
+  --destructive: 5.1 81.8% 72%;
+  --destructive-foreground: 45 8% 9.8%;
+  --border: 40 9.7% 18.2%;
+  --input: 45 10.9% 43.1%;
+  --ring: 45 29.6% 89.4%;
+}
+
+/* Etiket noktası: renk lib/tag-tone.ts → tagDotStyle() ile gelir. */
+.tag-dot {
+  background-color: var(--tag-dot);
+}
+.dark .tag-dot {
+  background-color: var(--tag-dot-dark, var(--tag-dot));
+}
+
+html[data-fp-app] body {
+  background-color: var(--canvas);
+  color: var(--fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-app,
+  html[data-fp-app] {
+    --dur-base: 100ms;
+    --dur-slow: 100ms;
+  }
+
+  /* Dialog, sheet ve menüler azaltılmış harekette yalnız solar: zoom ve
+     kayma (tailwindcss-animate --tw-enter/exit-* değişkenleri) sıfırlanır,
+     opaklık 0↔1 kalır. Genel "0.01ms" ağı (aşağıda) animasyonu tamamen
+     anlık yapardı; burada kısa (100ms) solma özellikle geri verilir. */
+  .fp-app [data-state],
+  html[data-fp-app] [data-state] {
+    --tw-enter-scale: 1;
+    --tw-exit-scale: 1;
+    --tw-enter-translate-x: 0px;
+    --tw-exit-translate-x: 0px;
+    --tw-enter-translate-y: 0px;
+    --tw-exit-translate-y: 0px;
+    --tw-enter-opacity: 0;
+    --tw-exit-opacity: 0;
+  }
+  .fp-app [class*=":animate-in"],
+  .fp-app [class*=":animate-out"],
+  html[data-fp-app] [class*=":animate-in"],
+  html[data-fp-app] [class*=":animate-out"] {
+    animation-duration: var(--dur-base) !important;
+  }
+}
+
+/* iOS Safari odaklanınca 16px altındaki alanı yakınlaştırır. Panelde gövde
+   14px olduğu için yalnız dar ekranda (<768px) alan metni 16px. Katmansız
+   kural, utilities katmanındaki text-base/text-sm'i ezer; portal dialog'ları
+   için html[data-fp-app] de kapsanır. */
+@media (max-width: 767px) {
+  .fp-app :is(input, textarea, select):not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]),
+  html[data-fp-app] :is(input, textarea, select):not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]) {
+    font-size: 16px;
+  }
+}
+
+@theme inline {
+  /* Tailwind 4.3 varsayılan font-sans yığınını değiştirdi (4.1.18:
+     ui-sans-serif, system-ui, sans-serif...; 4.3.3: -apple-system, Roboto,
+     Noto Sans, Arial...). Bu değer iki yerde etkili: `font-sans` yardımcı
+     sınıfı (pazarlama sayfaları, kenar çubuğu, yasal metin) ve preflight'ın
+     html seviyesindeki varsayılan yazı tipi (--default-font-family). 4.1.18'in
+     yığını sabitlendi; böylece Tailwind yükseltmesi (özellikle Linux
+     masaüstünde) görünümü değiştirmez.
+     tests/unit/tailwind-font-stack.test.ts bunu kilitler. */
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* shadcn tokens are bare HSL triplets ("52 46% 82%"); Tailwind v4 needs a
+     full colour here. Without hsl() every bg-card / text-muted-foreground /
+     border-border utility resolved to an invalid value and silently fell back
+     (transparent surfaces, dark currentColor borders, un-muted text). */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  /* Status utilities → bg-status-final, text-status-final-foreground, etc. */
+  --color-status-draft: hsl(var(--status-draft));
+  --color-status-draft-foreground: hsl(var(--status-draft-foreground));
+  --color-status-in-review: hsl(var(--status-in-review));
+  --color-status-in-review-foreground: hsl(var(--status-in-review-foreground));
+  --color-status-approved: hsl(var(--status-approved));
+  --color-status-approved-foreground: hsl(var(--status-approved-foreground));
+  --color-status-final: hsl(var(--status-final));
+  --color-status-final-foreground: hsl(var(--status-final-foreground));
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+
+  /* Panel yüzeyleri ve metin: bg-canvas, bg-sidebar, bg-raised, bg-hover,
+     text-fg / text-fg-2 / text-fg-3, border-line, border-control,
+     bg-accent-soft, bg-lemon, text-danger / text-success / text-warning. */
+  --color-canvas: var(--canvas);
+  --color-sidebar: var(--sidebar);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-line: var(--line);
+  --color-control: var(--control);
+  --color-accent-soft: var(--accent-soft);
+  --color-lemon: var(--lemon);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --shadow-pop: var(--fp-shadow-pop);
+  --shadow-dialog: var(--fp-shadow-dialog);
+  --ease-panel: var(--ease);
+
+  /* Specific Brand Colors */
+  --color-brand-dark: var(--color-brand-dark);
+  --color-brand-light: var(--color-brand-light);
+  --color-brand-lemon: var(--color-brand-lemon);
+  --color-brand-ocean: var(--color-brand-ocean);
+  --color-brand-ocean-foreground: var(--color-brand-ocean-foreground);
+  --color-brand-ocean-ink: var(--brand-ocean-ink);
+
+  /* Motion: tokens, keyframes and utilities live in app/motion.css. */
+  --ease-motion-out: var(--motion-ease-out);
+  --ease-motion-standard: var(--motion-ease-standard);
+  --ease-motion-spring: var(--motion-ease-spring);
+}
+
+/* Panel odak halkası (spec §6): kendi focus-visible sınıfı olmayan her
+   etkileşimli öğede 2px --fg, 2px boşluk. Bileşen sınıfları (ring-…,
+   outline-none) utilities katmanında olduğu için bunu ezer. */
+@layer base {
+  .fp-app :focus-visible,
+  html[data-fp-app] :focus-visible {
+    outline: 2px solid var(--fg);
+    outline-offset: 2px;
+  }
+}
+
+/* Odak halkası yalnız klavyeyle gezinirken (Tab/oklar). <AppScope> son
+   girdi kipini html[data-fp-kbd] ile işaretler; fareyle seçim, kısayol
+   tuşu ("i") ya da dialog'un otomatik odağı halka göstermez. Metin
+   alanları istisna: imleç nerede, kenarlıkla her zaman belli olur. */
+html[data-fp-app]:not([data-fp-kbd]) :focus-visible:not(input, textarea, select, [contenteditable="true"]),
+html[data-fp-app]:not([data-fp-kbd]) :focus-visible:not(input, textarea, select, [contenteditable="true"]) > * {
+  outline: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+}
+
+/* Tailwind v4 defaults borders to currentColor; the design assumes the
+   shadcn convention (soft --border everywhere unless a class says otherwise). */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentColor);
+  }
+}
+
+/* Base styles override. @layer base içinde: katmansız `p { text-wrap }`
+   (text-wrap-mode: wrap) Tailwind'in `truncate` / `whitespace-nowrap`
+   yardımcılarını eziyordu — <p> ve başlıklarda kısaltma hiç çalışmıyor,
+   metin satıra kırılıyordu. Katman içinde yardımcı sınıflar kazanır. */
+@layer base {
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+body,
+.dark body {
+  @apply bg-background text-foreground;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Global safety net for CSS animations/transitions (animate-pulse,
+     marquee, hover transitions, smooth scrolling). */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* İskeletin 150ms gecikmesi (spec §4.1) CSS ile: sunucu HTML'i hidrasyondan
+   önce de doğru davranır. Hareket değil, yalnız görünürlük anahtarı. */
+@keyframes fp-delay-in {
+  from { visibility: hidden; }
+  to { visibility: visible; }
+}
+.fp-delay-in {
+  animation: fp-delay-in 0s linear 150ms both;
+}

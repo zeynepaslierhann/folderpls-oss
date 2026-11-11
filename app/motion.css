@@ -1,0 +1,665 @@
+/*
+ * FolderPls motion system: the single source of truth for movement.
+ *
+ * Rules (performance budget):
+ *  - Only transform / opacity / filter are animated. No layout properties.
+ *  - Scroll-linked motion uses CSS scroll-driven animations
+ *    (animation-timeline: view() / scroll()). Browsers without support get an
+ *    IntersectionObserver fallback from <MotionRuntime> (html.motion-fallback).
+ *  - Anything that hides content before it animates lives inside
+ *    `prefers-reduced-motion: no-preference`, so reduced-motion users and
+ *    no-JS visitors always see the final, static state.
+ *  - lib/motion/tokens.ts mirrors the numeric tokens for canvas/JS code; a unit
+ *    test keeps the two in sync.
+ */
+
+/* Registered so scroll timelines can interpolate it (sticky "folders → tags"). */
+@property --morph-p {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+:root {
+  /* Duration */
+  --motion-duration-instant: 90ms;
+  --motion-duration-fast: 160ms;
+  --motion-duration-base: 260ms;
+  --motion-duration-slow: 480ms;
+  --motion-duration-slower: 800ms;
+  --motion-duration-ambient: 9s;
+
+  /* Easing */
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Distance */
+  --motion-distance-xs: 4px;
+  --motion-distance-sm: 8px;
+  --motion-distance-md: 16px;
+  --motion-distance-lg: 32px;
+  --motion-distance-xl: 64px;
+
+  /* Scale + rhythm */
+  --motion-scale-press: 0.97;
+  --motion-scale-enter: 0.96;
+  --motion-stagger: 60ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-instant: 1ms;
+    --motion-duration-fast: 1ms;
+    --motion-duration-base: 1ms;
+    --motion-duration-slow: 1ms;
+    --motion-duration-slower: 1ms;
+    --motion-distance-xs: 0px;
+    --motion-distance-sm: 0px;
+    --motion-distance-md: 0px;
+    --motion-distance-lg: 0px;
+    --motion-distance-xl: 0px;
+    --motion-scale-press: 1;
+    --motion-scale-enter: 1;
+    --motion-stagger: 0ms;
+  }
+}
+
+/* ─── Keyframes ──────────────────────────────────────────────────────────── */
+
+/* Reveal animates `transform`; hover/press use the individual `translate` /
+   `scale` properties so a finished (fill: both) reveal never blocks them. */
+@keyframes motion-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--reveal-x, 0px), var(--reveal-y, var(--motion-distance-lg)), 0)
+      scale(var(--reveal-scale, 1));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes motion-reveal-soft {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--reveal-y, var(--motion-distance-md)), 0);
+    filter: blur(var(--reveal-blur, 6px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes motion-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--enter-y, var(--motion-distance-md)), 0) scale(var(--enter-scale, 1));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Transform-only entrance: safe for LCP candidates (never hides the text). */
+@keyframes motion-rise {
+  from {
+    transform: translate3d(0, var(--motion-distance-sm), 0) scale(0.985);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes motion-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes motion-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(var(--float-x, 0px), var(--float-y, -10px), 0) rotate(var(--float-r, 0deg));
+  }
+}
+
+@keyframes motion-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes motion-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes motion-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes motion-parallax {
+  from {
+    transform: translate3d(0, var(--parallax-from, 40px), 0);
+  }
+  to {
+    transform: translate3d(0, var(--parallax-to, -40px), 0);
+  }
+}
+
+@keyframes motion-hero-exit {
+  to {
+    transform: perspective(1400px) rotateX(10deg) scale(0.94) translate3d(0, var(--motion-distance-lg), 0);
+    opacity: 0.55;
+  }
+}
+
+@keyframes motion-morph-progress {
+  from {
+    --morph-p: 0;
+  }
+  to {
+    --morph-p: 1;
+  }
+}
+
+@keyframes motion-tag-drop {
+  0%,
+  8% {
+    opacity: 0;
+    transform: translate3d(0, -18px, 0) scale(0.7);
+  }
+  16% {
+    opacity: 1;
+    transform: translate3d(0, 2px, 0) scale(1.06);
+  }
+  22%,
+  86% {
+    opacity: 1;
+    transform: none;
+  }
+  94%,
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* Walkthrough visuals ("how it works"). */
+@keyframes wt-expire {
+  0%,
+  55% {
+    opacity: 1;
+    transform: none;
+  }
+  79%,
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes wt-drain {
+  0% {
+    transform: scaleX(1);
+  }
+  79%,
+  100% {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes wt-fill {
+  0% {
+    transform: scaleX(0);
+  }
+  80%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes wt-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes wt-filter-out {
+  to {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0);
+  }
+}
+
+@keyframes motion-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes motion-vt-out {
+  to {
+    opacity: 0;
+    transform: translate3d(0, calc(var(--motion-distance-sm) * -1), 0) scale(0.995);
+  }
+}
+
+@keyframes motion-vt-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--motion-distance-md), 0);
+  }
+}
+
+@keyframes motion-accordion-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, calc(var(--motion-distance-xs) * -1), 0);
+  }
+}
+
+/* Classes live in the components layer so Tailwind utilities can still
+   override layout details (position, radius, …) on the same element. */
+@layer components {
+  /* ─── Scroll-synced reveal ──────────────────────────────────────────────── */
+  /* Usage: className="reveal" (+ optional style={{"--reveal-i": 2}} for a row
+     stagger, "reveal-left" / "reveal-right" / "reveal-scale" / "reveal-soft"). */
+
+  .reveal-left {
+    --reveal-x: calc(var(--motion-distance-lg) * -1);
+    --reveal-y: 0px;
+  }
+  .reveal-right {
+    --reveal-x: var(--motion-distance-lg);
+    --reveal-y: 0px;
+  }
+  .reveal-scale {
+    --reveal-scale: var(--motion-scale-enter);
+    --reveal-y: var(--motion-distance-md);
+  }
+  .reveal-soft {
+    --reveal-blur: 6px;
+    --reveal-y: var(--motion-distance-md);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+      .reveal {
+        animation: motion-reveal linear both;
+        animation-timing-function: var(--motion-ease-out);
+        animation-timeline: view();
+        animation-range: entry calc(var(--reveal-i, 0) * 6%) cover calc(28% + var(--reveal-i, 0) * 6%);
+      }
+      .reveal.reveal-soft {
+        animation-name: motion-reveal-soft;
+      }
+
+      /* Thin reading/scroll progress bar (navbar). */
+      .scroll-progress {
+        display: block;
+        transform-origin: 0 50%;
+        animation: motion-grow-x linear both;
+        animation-timeline: scroll(root block);
+      }
+
+      /* Decorative depth: moves slower/faster than the page. Transform only. */
+      .parallax {
+        animation: motion-parallax linear both;
+        animation-timeline: view();
+        animation-range: cover 0% cover 100%;
+      }
+
+      /* Hero mock tilts back as the hero scrolls away. */
+      .hero-exit {
+        animation: motion-hero-exit linear both;
+        animation-timeline: view();
+        animation-range: exit 0% exit 100%;
+      }
+
+      /* Vertical progress rail (walkthrough). */
+      .rail-fill {
+        transform-origin: 50% 0;
+        animation: motion-grow-y linear both;
+        animation-timeline: view();
+        animation-range: contain 0% contain 100%;
+      }
+
+      /* Sticky "Drive folders → tag layer" stage. */
+      .morph-track {
+        view-timeline-name: --morph;
+        view-timeline-axis: block;
+      }
+      .morph-stage {
+        animation: motion-morph-progress linear both;
+        animation-timeline: --morph;
+        animation-range: contain 0% contain 100%;
+      }
+    }
+
+    /* IntersectionObserver fallback (set by <MotionRuntime> only when
+       scroll-driven animations are unsupported). */
+    html.motion-fallback .reveal {
+      transition:
+        opacity var(--motion-duration-slower) var(--motion-ease-out),
+        transform var(--motion-duration-slower) var(--motion-ease-out),
+        filter var(--motion-duration-slower) var(--motion-ease-out);
+      transition-delay: calc(var(--reveal-i, 0) * var(--motion-stagger));
+    }
+    html.motion-fallback .reveal:not(.is-revealed) {
+      opacity: 0;
+      transform: translate3d(var(--reveal-x, 0px), var(--reveal-y, var(--motion-distance-lg)), 0)
+        scale(var(--reveal-scale, 1));
+      filter: blur(var(--reveal-blur, 0px));
+    }
+
+    /* ─── Page-native motion ──────────────────────────────────────────────── */
+
+    /* Time-based entrance on mount; stagger with style={{"--enter-i": n}}. */
+    .motion-enter {
+      animation: motion-enter var(--motion-duration-slower) var(--motion-ease-out) both;
+      animation-delay: calc(var(--enter-i, 0) * var(--motion-stagger) + var(--enter-delay, 0ms));
+    }
+    .motion-rise {
+      animation: motion-rise var(--motion-duration-slower) var(--motion-ease-out) both;
+    }
+    .motion-pop {
+      animation: motion-pop var(--motion-duration-slow) var(--motion-ease-out) both;
+      animation-delay: calc(var(--enter-i, 0) * var(--motion-stagger));
+    }
+
+    /* Ambient loops: paused by <MotionRuntime> while off-screen. */
+    .ambient-float {
+      animation: motion-float var(--float-duration, var(--motion-duration-ambient)) var(--motion-ease-in-out) infinite;
+      animation-delay: var(--float-delay, 0s);
+    }
+    .ambient-marquee {
+      animation: motion-marquee var(--marquee-duration, 40s) linear infinite;
+    }
+    .ambient-marquee:hover,
+    .ambient-marquee:focus-within {
+      animation-play-state: paused;
+    }
+    [data-ambient][data-offscreen] :is(.ambient-float, .ambient-marquee, .hero-tag-drop, .motion-spin),
+    [data-ambient][data-offscreen]:is(.ambient-float, .ambient-marquee) {
+      animation-play-state: paused;
+    }
+
+      /* Walkthrough visuals: CSS loops (was framer-motion). */
+    .wt-expire {
+      animation: wt-expire 3.8s var(--motion-ease-in-out) infinite;
+    }
+    .wt-drain {
+      animation: wt-drain 3.8s linear infinite;
+    }
+    .wt-fill {
+      animation: wt-fill 3s var(--motion-ease-in-out) infinite;
+    }
+    .wt-pulse {
+      animation: wt-pulse 3s var(--motion-ease-in-out) infinite;
+    }
+    .wt-filter-out {
+      animation: wt-filter-out var(--motion-duration-slow) var(--motion-ease-out) both;
+      animation-delay: calc(0.4s + var(--enter-i, 0) * var(--motion-stagger));
+    }
+    [data-ambient][data-offscreen] :is(.wt-expire, .wt-drain, .wt-fill, .wt-pulse) {
+      animation-play-state: paused;
+    }
+
+  /* Hero: tags keep landing on the mock files ("tag without moving"). */
+    .hero-tag-drop {
+      animation: motion-tag-drop 7.2s var(--motion-ease-out) infinite;
+      animation-delay: var(--drop-delay, 0s);
+    }
+
+    /* Drag-and-drop (panel): sürüklenen öğe yalnız soluklaşır — ölçek ve
+     nabız yok; bırakma hedefi --accent-soft ile gösterilir (bileşende).
+     (Keyboard users move files via the context menu.) */
+  [data-dragging] {
+    opacity: 0.45;
+    transition: opacity var(--dur-fast, 100ms) var(--ease, ease-out);
+  }
+    /* Graph view / panels. */
+    .motion-scale-in {
+      animation: motion-enter var(--motion-duration-slower) var(--motion-ease-out) both;
+      --enter-scale: var(--motion-scale-enter);
+      --enter-y: 0px;
+    }
+
+    /* View Transitions API: soft cross-fade + rise between pages. */
+    ::view-transition-old(root) {
+      animation: motion-vt-out var(--motion-duration-base) var(--motion-ease-in) both;
+    }
+    ::view-transition-new(root) {
+      animation: motion-vt-in var(--motion-duration-slow) var(--motion-ease-out) both;
+    }
+    ::view-transition-group(site-header) {
+      animation-duration: var(--motion-duration-base);
+    }
+
+    .motion-accordion[data-state="open"] > * {
+      animation: motion-accordion-in var(--motion-duration-base) var(--motion-ease-out) both;
+    }
+  }
+
+  /* Hero mock 3D tilt (vars set on pointer move, rAF-throttled). */
+  .hero-tilt {
+    transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+    transform-style: preserve-3d;
+    transition: transform var(--motion-duration-slower) var(--motion-ease-out);
+    will-change: transform;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero-tilt {
+      transform: none;
+    }
+  }
+
+  /* Header keeps its place during page transitions instead of cross-fading. */
+  .site-header {
+    view-transition-name: site-header;
+  }
+
+  .scroll-progress {
+    display: none;
+  }
+
+  /* Brand flow gradient (progress bar, walkthrough rail). */
+  .bg-brand-flow-x {
+    background-image: linear-gradient(90deg, var(--brand-ocean-ink), var(--color-brand-ocean), var(--color-brand-lemon));
+  }
+  .bg-brand-flow-y {
+    background-image: linear-gradient(180deg, var(--brand-ocean-ink), var(--color-brand-ocean), var(--color-brand-lemon));
+  }
+
+  /* ─── Micro-interactions (safe under reduced motion: tokens collapse) ───── */
+
+  /* Hover lift: transform + a drop-shadow filter (the element's own filter is
+     not clipped by its overflow, so it composes with .motion-spotlight). */
+  .motion-lift {
+    transition:
+      translate var(--motion-duration-base) var(--motion-ease-out),
+      filter var(--motion-duration-base) var(--motion-ease-out),
+      background-color var(--motion-duration-base) var(--motion-ease-out),
+      border-color var(--motion-duration-base) var(--motion-ease-out);
+  }
+  @media (hover: hover) {
+    .motion-lift:hover {
+      translate: 0 calc(var(--motion-distance-xs) * -1);
+      filter: drop-shadow(0 14px 24px hsl(var(--foreground) / 0.14));
+    }
+  }
+  .motion-lift:focus-visible,
+  .motion-lift:focus-within {
+    filter: drop-shadow(0 10px 18px hsl(var(--foreground) / 0.12));
+  }
+
+  /* Pointer spotlight: a blurred blob translated to the cursor (--mx/--my set
+     by a delegated pointermove handler). Transform + opacity only. */
+  .motion-spotlight {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .motion-spotlight::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 220px;
+    height: 220px;
+    margin: -110px 0 0 -110px;
+    border-radius: 9999px;
+    background: radial-gradient(circle, var(--spotlight-color, rgb(155 179 208 / 0.35)), transparent 70%);
+    transform: translate3d(var(--mx, 50%), var(--my, 50%), 0);
+    opacity: 0;
+    transition: opacity var(--motion-duration-slow) var(--motion-ease-out);
+    pointer-events: none;
+    z-index: -1;
+  }
+  @media (hover: hover) {
+    .motion-spotlight:hover::before {
+      opacity: 1;
+    }
+  }
+
+  /* Animated underline for text links (scaleX). */
+  .motion-underline {
+    position: relative;
+  }
+  .motion-underline::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 1.5px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: 100% 50%;
+    transition: transform var(--motion-duration-base) var(--motion-ease-out);
+  }
+  .motion-underline:hover::after,
+  .motion-underline:focus-visible::after {
+    transform: scaleX(1);
+    transform-origin: 0 50%;
+  }
+
+  /* Shine sweep across primary CTAs on hover. */
+  .motion-shine {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .motion-shine::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 0.55) 50%, transparent 80%);
+    transform: translateX(-120%);
+    pointer-events: none;
+  }
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .motion-shine:hover::after {
+      transition: transform var(--motion-duration-slower) var(--motion-ease-out);
+      transform: translateX(120%);
+    }
+  }
+
+  /* Spinner that respects the tokens (replaces ad-hoc animate-spin loops). */
+  @media (prefers-reduced-motion: no-preference) {
+    .motion-spin {
+      animation: motion-spin var(--spin-duration, 0.9s) linear infinite;
+    }
+  }
+
+  /* ─── Sticky "Drive folders → tag layer" morph ───────────────────────────── */
+  .morph-board {
+    --row-h: 2.45rem;
+    --y-shift: 0.9;
+    font-size: 13px;
+  }
+  @media (min-width: 640px) {
+    .morph-board {
+      --row-h: 2.6rem;
+      --y-shift: 0;
+    }
+  }
+  .morph-static {
+    display: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .morph-animated {
+      display: none;
+    }
+    .morph-static {
+      display: grid;
+    }
+  }
+  .morph-card-bg {
+    opacity: var(--e, 1);
+  }
+  /* Each node derives its own eased local progress from --morph-p:
+     --s = start, --d = duration (both 0..1 of the whole scroll). */
+  .morph-node {
+    --t: clamp(0, (var(--morph-p) - var(--s, 0)) / var(--d, 0.35), 1);
+    --e: calc(var(--t) * var(--t) * (3 - 2 * var(--t)));
+  }
+  .morph-file {
+    transform: translate3d(
+      calc(var(--dx0, 0) * (1 - var(--e)) * 1.25em),
+      calc((var(--y1) - var(--y0)) * var(--e) * var(--row-h)),
+      0
+    );
+  }
+  .morph-folder {
+    transform: translate3d(calc(var(--dx0, 0) * 1.25em - var(--e) * 1em), 0, 0) scale(calc(1 - var(--e) * 0.08));
+    opacity: calc(1 - var(--e));
+  }
+  .morph-in {
+    opacity: var(--e);
+    transform: scale(calc(0.6 + var(--e) * 0.4));
+  }
+  .morph-in-y {
+    opacity: var(--e);
+    transform: translate3d(0, calc((1 - var(--e)) * var(--motion-distance-sm)), 0);
+  }
+  .morph-out {
+    opacity: calc(1 - var(--e));
+  }
+}

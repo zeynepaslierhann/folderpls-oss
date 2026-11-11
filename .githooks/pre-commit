@@ -1,0 +1,50 @@
+#!/bin/sh
+# .githooks/pre-commit — commit öncesi SIR TARAMASI (2026-10-06 güvenlik tabanı)
+#
+# Sıra: 1) gitleaks (kuruluysa)   2) .githooks/secret-scan.mjs (yalnız node gerekir, kurulum yok)
+# Etkinleştirme (klon/worktree başına bir kez):  git config core.hooksPath .githooks
+# Ayrıntı: .githooks/README.md
+#
+# Çıktıda sır DEĞERİ asla yazılmaz (gitleaks --redact; secret-scan yalnız kural + dosya:satır).
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$ROOT" || exit 0
+
+run_node_scan() {
+  if command -v node >/dev/null 2>&1 && [ -f .githooks/secret-scan.mjs ]; then
+    node .githooks/secret-scan.mjs --staged
+    rc=$?
+    case $rc in
+      0) return 0 ;;
+      1) return 1 ;;
+      *) echo "pre-commit UYARI: secret-scan beklenmedik hata verdi (kod $rc) — bu commit TARANMADI." >&2; return 0 ;;
+    esac
+  fi
+  echo "pre-commit UYARI: ne gitleaks ne node bulundu — sır taraması ATLANDI. Kur: brew install gitleaks" >&2
+  return 0
+}
+
+if command -v gitleaks >/dev/null 2>&1; then
+  CFG=""
+  [ -f .gitleaks.toml ] && CFG="--config .gitleaks.toml"
+  # gitleaks >= 8.19: `git --staged`; eski 8.x: `protect --staged`
+  if gitleaks git --help >/dev/null 2>&1; then
+    OUT=$(gitleaks git --pre-commit --staged --redact --no-banner $CFG 2>&1); RC=$?
+  else
+    OUT=$(gitleaks protect --staged --redact --no-banner $CFG 2>&1); RC=$?
+  fi
+  [ "$RC" -eq 0 ] && exit 0
+  if echo "$OUT" | grep -qi 'leaks found'; then
+    echo "$OUT" >&2
+    echo >&2
+    echo "Commit ENGELLENDİ (gitleaks). Gerçek sırsa: çıkar, sırrı DÖNDÜR (rotate), ortam değişkenine taşı." >&2
+    echo "Yanlış pozitifse: .gitleaks.toml allowlist ya da satıra 'gitleaks:allow'. (--no-verify yalnız gerekçeli.)" >&2
+    exit 1
+  fi
+  # gitleaks çalışmadı (bayrak/yapılandırma hatası) → yedek tarayıcıya düş, commit'i körlemesine engelleme
+  echo "pre-commit UYARI: gitleaks hata verdi (sır bulgusu değil) — yedek tarayıcıya geçiliyor:" >&2
+  echo "$OUT" | head -3 >&2
+fi
+
+run_node_scan || exit 1
+exit 0

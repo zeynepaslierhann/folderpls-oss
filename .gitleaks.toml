@@ -1,0 +1,15 @@
+# gitleaks yapılandırması — varsayılan kurallar + kilit dosyası muafiyeti.
+# Hook (.githooks/pre-commit) gitleaks kuruluysa bunu otomatik kullanır.
+title = "gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "kilit dosyalarındaki bütünlük özetleri sır değildir"
+paths = [
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)npm-shrinkwrap\.json$''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)yarn\.lock$''',
+]

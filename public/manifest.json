@@ -1,0 +1,30 @@
+{
+  "name": "FolderPls - Organize Google Drive Files with Metadata Tags",
+  "short_name": "FolderPls",
+  "description": "Organize your Google Drive files without moving them. Add metadata tags, labels, and filters to find files instantly.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F3EECE",
+  "theme_color": "#F3EECE",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": [
+    "productivity",
+    "business",
+    "utilities"
+  ],
+  "lang": "en-US",
+  "dir": "ltr"
+}

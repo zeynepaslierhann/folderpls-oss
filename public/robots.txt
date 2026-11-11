@@ -1,0 +1,8 @@
+# robots.txt for FolderPls
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+
+# Add your own origin when you deploy:
+# Sitemap: https://your-domain.example/sitemap.xml
